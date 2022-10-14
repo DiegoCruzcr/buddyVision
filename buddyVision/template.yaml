@@ -1,0 +1,124 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  buddyVision
+
+  Sample SAM Template for buddyVision
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 30
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref DataSensorsTable
+
+
+
+Resources:
+  Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSConfigRulesExecutionRole
+      Policies:
+        - PolicyName: !Join [ '-', [ !Ref 'AWS::StackName', 'master', 'policy' ] ]
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DeleteNetworkInterface
+                  - ec2:AttachNetworkInterface
+                  - ec2:DescribeInstances
+                  - ec2:DescribeNetworkInterfaces
+                Resource: "*"
+              - Effect: Allow
+                Action: "*"
+                Resource: "*"
+                  
+  SensorsREST:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: dev
+      Auth:
+        ResourcePolicy:
+          CustomStatements: [
+          {
+            'Effect': 'Allow',
+            'Principal': '*',
+            'Action': 'execute-api:Invoke',
+            'Resource': [
+              'execute-api:/*'
+            ]
+          }]
+
+  SensorsRestApiHandler:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: hello_world/
+      Handler: app.lambda_handler
+      Runtime: python3.8
+      Architectures:
+        - x86_64
+      Role: !GetAtt Role.Arn
+      Events:
+        getSensors:
+          Type: Api
+          Properties:
+            Path: /getSensors
+            Method: Get
+            RestApiId:
+              Ref: SensorsREST
+            # RequestParameters:
+            #   - method.request.querystring.quotation_date:
+            #      Required: true
+            #   - method.request.querystring.country_code:
+            #      Required: true
+            #   - method.request.querystring.currency_code:
+            #      Required: true
+  DataSensorsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: sample_time
+          AttributeType: S
+        - AttributeName: device_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: sample_time
+          KeyType: HASH
+        - AttributeName: device_id
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expirationTime
+        Enabled: true
+      BillingMode: PAY_PER_REQUEST
+
+# Outputs:
+  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
+  # Find out more about other implicit resources you can reference within SAM
+  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
+  # HelloWorldApi:
+  #   Description: "API Gateway endpoint URL for Prod stage for Hello World function"
+  #   Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/hello/"
+  # HelloWorldFunction:
+  #   Description: "Hello World Lambda Function ARN"
+  #   Value: !GetAtt HelloWorldFunction.Arn
+  # HelloWorldFunctionIamRole:
+  #   Description: "Implicit IAM Role created for Hello World function"
+  #   Value: !GetAtt HelloWorldFunctionRole.Arn
